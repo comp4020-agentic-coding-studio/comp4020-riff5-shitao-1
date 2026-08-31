@@ -23,9 +23,7 @@ export interface GameState {
   alive: boolean;
   cause: "wall" | "ink" | "ground" | null;
   wallSpawnIndex: number;
-  dropSpawnIndex: number;
   distanceSinceWall: number;
-  distanceSinceDrop: number;
 }
 
 export interface Config {
@@ -37,7 +35,6 @@ export interface Config {
   wallSpacing: number;
   wallThickness: number;
   gapHeight: number;
-  dropSpacing: number;
   dropRadius: number;
   inkDecay: number;
   inkPerDrop: number;
@@ -55,7 +52,6 @@ export const DEFAULT_CONFIG: Config = {
   wallSpacing: 0.5,
   wallThickness: 0.035,
   gapHeight: 0.26,
-  dropSpacing: 0.37,
   dropRadius: 0.022,
   inkDecay: 0.09,
   inkPerDrop: 0.2,
@@ -75,9 +71,7 @@ export function createInitialState(): GameState {
     alive: true,
     cause: null,
     wallSpawnIndex: 0,
-    dropSpawnIndex: 0,
     distanceSinceWall: 0.15, // first wall arrives quickly, before the paper's edge
-    distanceSinceDrop: 0.3,
   };
 }
 
@@ -102,10 +96,6 @@ export function gapCenterFor(index: number): number {
   if (index === 1) return 0.7;
   const amplitude = Math.min(0.34, 0.2 + index * 0.012);
   return clamp(0.5 + amplitude * Math.sin(index * 0.9), 0.16, 0.84);
-}
-
-export function dropYFor(index: number): number {
-  return 0.5 + 0.32 * Math.sin(index * 2.07 + 0.7);
 }
 
 export function speedMultiplier(distance: number, config: Config = DEFAULT_CONFIG): number {
@@ -163,22 +153,19 @@ export function advance(
     .map((w) => ({ x: w.x - dx, gapCenter: w.gapCenter }))
     .filter((w) => w.x > -config.wallThickness);
 
+  let drops = state.drops.map((d) => ({ x: d.x - dx, y: d.y })).filter((d) => d.x > -config.dropRadius);
+
   let wallSpawnIndex = state.wallSpawnIndex;
   let distanceSinceWall = state.distanceSinceWall + dx;
   while (distanceSinceWall >= config.wallSpacing) {
     distanceSinceWall -= config.wallSpacing;
-    walls = [...walls, { x: 1 + config.wallThickness, gapCenter: gapCenterFor(wallSpawnIndex) }];
+    const gapCenter = gapCenterFor(wallSpawnIndex);
+    walls = [...walls, { x: 1 + config.wallThickness, gapCenter }];
+    // The ink lives inside the gap it belongs to rather than on a schedule of
+    // its own --- collecting a drop and threading the gap are the same
+    // motion, so reaching for ink never means flying blind into a wall.
+    drops = [...drops, { x: 1 + config.wallThickness, y: gapCenter }];
     wallSpawnIndex += 1;
-  }
-
-  let drops = state.drops.map((d) => ({ x: d.x - dx, y: d.y })).filter((d) => d.x > -config.dropRadius);
-
-  let dropSpawnIndex = state.dropSpawnIndex;
-  let distanceSinceDrop = state.distanceSinceDrop + dx;
-  while (distanceSinceDrop >= config.dropSpacing) {
-    distanceSinceDrop -= config.dropSpacing;
-    drops = [...drops, { x: 1 + config.dropRadius, y: dropYFor(dropSpawnIndex) }];
-    dropSpawnIndex += 1;
   }
 
   let ink = Math.max(0, state.ink - dt * config.inkDecay);
@@ -206,8 +193,6 @@ export function advance(
     alive,
     cause,
     wallSpawnIndex,
-    dropSpawnIndex,
     distanceSinceWall,
-    distanceSinceDrop,
   };
 }
