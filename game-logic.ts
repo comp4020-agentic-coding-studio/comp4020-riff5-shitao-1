@@ -24,6 +24,7 @@ export interface GameState {
   cause: "wall" | "ink" | "ground" | null;
   wallSpawnIndex: number;
   distanceSinceWall: number;
+  seed: number; // fixes this run's course and starting position; a fresh game picks a fresh one
 }
 
 export interface Config {
@@ -60,9 +61,14 @@ export const DEFAULT_CONFIG: Config = {
   maxFallSpeed: 1.1,
 };
 
-export function createInitialState(): GameState {
+// seed=0 reproduces the exact course this game shipped with (and is what
+// every test above implicitly asserts against); the caller picks a fresh
+// seed --- e.g. Math.random() at the browser boundary, never inside this
+// pure module --- to get a different starting height and a different
+// barrier layout each time a new game starts.
+export function createInitialState(seed = 0): GameState {
   return {
-    brushY: 0.5,
+    brushY: clamp(0.5 + 0.22 * Math.sin(seed * 5.1), 0.2, 0.8),
     brushVelocity: 0,
     ink: 1,
     distance: 0,
@@ -72,6 +78,7 @@ export function createInitialState(): GameState {
     cause: null,
     wallSpawnIndex: 0,
     distanceSinceWall: 0.15, // first wall arrives quickly, before the paper's edge
+    seed,
   };
 }
 
@@ -83,19 +90,22 @@ function clamp01(value: number): number {
   return clamp(value, 0, 1);
 }
 
-// The gap pattern is deterministic (a function of spawn order, not the
-// clock), so a replay and a test both see the same course. The first two
-// gaps sit off-centre on purpose --- the brush starts at rest at 0.5 and
+// The gap pattern is deterministic for a given seed (a function of spawn
+// order and that one number, not the clock), so a replay and a test both see
+// the same course as long as they use the same seed. The first two gaps sit
+// off-centre on purpose --- the brush starts at rest near the middle and
 // gravity takes over immediately, so the opening wall only misses it if the
 // player is already holding the up control, which is the whole affordance:
 // the game teaches "falling is the default, holding up fights it" before
 // anyone reads a word about it. After that, the amplitude ramps up as the
-// run goes on.
-export function gapCenterFor(index: number): number {
-  if (index === 0) return 0.3;
-  if (index === 1) return 0.7;
+// run goes on. seed=0 reproduces the original fixed course exactly; any other
+// seed folds into every gap's phase, so a new game gets a different layout
+// from its very first wall.
+export function gapCenterFor(index: number, seed = 0): number {
+  if (index === 0) return clamp(0.3 + 0.15 * Math.sin(seed * 12.9), 0.16, 0.84);
+  if (index === 1) return clamp(0.7 + 0.15 * Math.sin(seed * 9.3), 0.16, 0.84);
   const amplitude = Math.min(0.34, 0.2 + index * 0.012);
-  return clamp(0.5 + amplitude * Math.sin(index * 0.9), 0.16, 0.84);
+  return clamp(0.5 + amplitude * Math.sin(index * 0.9 + seed * 3.3), 0.16, 0.84);
 }
 
 // A drop's position within its gap: two sine waves at frequencies unrelated
@@ -175,7 +185,7 @@ export function advance(
   let distanceSinceWall = state.distanceSinceWall + dx;
   while (distanceSinceWall >= config.wallSpacing) {
     distanceSinceWall -= config.wallSpacing;
-    const gapCenter = gapCenterFor(wallSpawnIndex);
+    const gapCenter = gapCenterFor(wallSpawnIndex, state.seed);
     walls = [...walls, { x: 1 + config.wallThickness, gapCenter }];
     // The ink lives inside the gap it belongs to rather than on a schedule of
     // its own --- collecting a drop and threading the gap are the same
@@ -217,5 +227,6 @@ export function advance(
     cause,
     wallSpawnIndex,
     distanceSinceWall,
+    seed: state.seed,
   };
 }

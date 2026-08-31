@@ -120,4 +120,33 @@ describe("gapCenterFor: deterministic course, harder as the run goes on", () => 
       expect(center).toBeLessThanOrEqual(0.84);
     }
   });
+
+  it("never places a gap centre outside the band for any seed either", () => {
+    for (let i = 0; i < 50; i += 1) {
+      const center = gapCenterFor(i, 123.456);
+      expect(center).toBeGreaterThanOrEqual(0.16);
+      expect(center).toBeLessThanOrEqual(0.84);
+    }
+  });
+});
+
+describe("seeded randomness: a new game gets a different ball start and barrier layout", () => {
+  it("different seeds start the brush at a different height", () => {
+    expect(createInitialState(0.7).brushY).not.toBeCloseTo(createInitialState(1.9).brushY, 5);
+  });
+
+  it("different seeds lay out different gaps", () => {
+    expect(gapCenterFor(4, 0.7)).not.toBeCloseTo(gapCenterFor(4, 1.9), 5);
+  });
+
+  it("the same seed reproduces the exact same course, so a run is still replayable", () => {
+    expect(createInitialState(2.5).brushY).toBeCloseTo(createInitialState(2.5).brushY);
+    expect(gapCenterFor(4, 2.5)).toBeCloseTo(gapCenterFor(4, 2.5));
+  });
+
+  it("seed 0 keeps the original shipped course, so existing tests stay meaningful", () => {
+    expect(createInitialState(0).brushY).toBeCloseTo(0.5);
+    expect(gapCenterFor(0, 0)).toBeCloseTo(0.3);
+    expect(gapCenterFor(1, 0)).toBeCloseTo(0.7);
+  });
 });

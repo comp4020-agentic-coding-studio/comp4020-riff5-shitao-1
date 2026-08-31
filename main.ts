@@ -16,7 +16,15 @@ const PAPER = "#f3ead9";
 const INK = "#1c1a17";
 const SEAL = "#b3402a";
 
-let state: GameState = createInitialState();
+// The pure sim takes its randomness as a seed rather than calling Math.random
+// itself, so this is the one place a new game's course and starting height
+// actually get decided --- every other read of `state.seed` downstream is
+// just replaying that one choice deterministically.
+function randomSeed(): number {
+  return Math.random() * 1000;
+}
+
+let state: GameState = createInitialState(randomSeed());
 let thrustHeld = false; // true while the up control is held; gravity wins the instant it isn't
 
 let diedAt: number | null = null;
@@ -221,7 +229,7 @@ function frame(now: number): void {
       }
     }
   } else if (diedAt !== null && (now - diedAt) / 1000 >= RESET_DELAY) {
-    state = createInitialState();
+    state = createInitialState(randomSeed());
     diedAt = null;
     trail.length = 0;
   }
