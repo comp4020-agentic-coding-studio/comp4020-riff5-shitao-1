@@ -15,6 +15,7 @@ export interface Drop {
 
 export interface GameState {
   brushY: number; // 0..1
+  brushVelocity: number; // fraction-of-height per second; positive is downward
   ink: number; // 0..1, 0 means the stroke has dried out
   distance: number; // world units travelled, doubles as the score
   walls: Wall[];
@@ -40,7 +41,9 @@ export interface Config {
   dropRadius: number;
   inkDecay: number;
   inkPerDrop: number;
-  brushEase: number;
+  gravity: number; // downward accel on brushY, in fraction-of-height per second^2
+  lift: number; // extra upward accel applied on top of gravity while the up control is held
+  maxFallSpeed: number; // terminal velocity, in fraction-of-height per second, either direction
 }
 
 export const DEFAULT_CONFIG: Config = {
@@ -56,12 +59,15 @@ export const DEFAULT_CONFIG: Config = {
   dropRadius: 0.022,
   inkDecay: 0.09,
   inkPerDrop: 0.2,
-  brushEase: 10,
+  gravity: 1.5,
+  lift: 3.3,
+  maxFallSpeed: 1.1,
 };
 
 export function createInitialState(): GameState {
   return {
     brushY: 0.5,
+    brushVelocity: 0,
     ink: 1,
     distance: 0,
     walls: [],
@@ -83,16 +89,14 @@ function clamp01(value: number): number {
   return clamp(value, 0, 1);
 }
 
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * clamp01(t);
-}
-
 // The gap pattern is deterministic (a function of spawn order, not the
 // clock), so a replay and a test both see the same course. The first two
-// gaps sit off-centre on purpose --- the brush starts at 0.5, so the opening
-// wall only misses it if the player has already moved, which is the whole
-// affordance: the game teaches "the mouse steers this" before anyone reads a
-// word about it. After that, the amplitude ramps up as the run goes on.
+// gaps sit off-centre on purpose --- the brush starts at rest at 0.5 and
+// gravity takes over immediately, so the opening wall only misses it if the
+// player is already holding the up control, which is the whole affordance:
+// the game teaches "falling is the default, holding up fights it" before
+// anyone reads a word about it. After that, the amplitude ramps up as the
+// run goes on.
 export function gapCenterFor(index: number): number {
   if (index === 0) return 0.3;
   if (index === 1) return 0.7;
@@ -133,14 +137,21 @@ export function checkWallCollision(
 export function advance(
   state: GameState,
   dt: number,
-  pointerY: number,
+  thrustHeld: boolean,
   config: Config = DEFAULT_CONFIG,
 ): GameState {
   if (!state.alive || dt <= 0) return state;
 
   const dx = dt * config.scrollSpeed * speedMultiplier(state.distance, config);
-  const brushY = lerp(state.brushY, clamp01(pointerY), dt * config.brushEase);
   const distance = state.distance + dx;
+
+  // Gravity always pulls the stroke down the page; holding the up control is
+  // the only thing that resists it, so letting go --- even briefly --- means
+  // the brush starts drifting toward the bottom of the paper again.
+  let brushVelocity = state.brushVelocity + config.gravity * dt;
+  if (thrustHeld) brushVelocity -= config.lift * dt;
+  brushVelocity = clamp(brushVelocity, -config.maxFallSpeed, config.maxFallSpeed);
+  const brushY = clamp01(state.brushY + brushVelocity * dt);
 
   let walls = state.walls
     .map((w) => ({ x: w.x - dx, gapCenter: w.gapCenter }))
@@ -181,6 +192,7 @@ export function advance(
 
   return {
     brushY,
+    brushVelocity,
     ink,
     distance,
     walls,

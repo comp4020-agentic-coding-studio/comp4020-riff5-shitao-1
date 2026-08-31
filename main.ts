@@ -2,8 +2,9 @@
 // make the first move obvious on its own, so there is no start button and no
 // text about controls anywhere in this file or index.html: the brush sits
 // still, the first gap is already off to one side, and the wall is already
-// approaching. Moving the pointer (or holding an arrow key) is the only way
-// to find out what happens next, which is the point.
+// approaching. Gravity is already pulling the brush down; holding the
+// pointer, a touch, or the up key is the only way to find out what happens
+// next, which is the point.
 import { advance, createInitialState, DEFAULT_CONFIG, type GameState } from "./game-logic.ts";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game");
@@ -16,9 +17,7 @@ const INK = "#1c1a17";
 const SEAL = "#b3402a";
 
 let state: GameState = createInitialState();
-let pointerY = 0.5;
-let keyDir = 0; // -1 up, 0 none, +1 down
-const KEY_SPEED = 1.1; // fraction of height per second
+let thrustHeld = false; // true while the up control is held; gravity wins the instant it isn't
 
 let diedAt: number | null = null;
 const RESET_DELAY = 1.3; // seconds the dried stroke lingers before a fresh one begins
@@ -88,33 +87,39 @@ function resizeCanvas(): void {
   ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
-function relativeY(clientY: number): number {
-  const rect = canvas!.getBoundingClientRect();
-  return Math.min(1, Math.max(0, (clientY - rect.top) / rect.height));
-}
-
-// pointermove unifies mouse, touch and pen --- no separate touch handler
+// pointerdown/up unifies mouse, touch and pen --- no separate touch handler
 // needed; touch-action: none (styles.css) stops the page scrolling under it.
-canvas.addEventListener("pointermove", (event) => {
-  pointerY = relativeY(event.clientY);
+// pointerup lives on window, not the canvas, so releasing after the pointer
+// has dragged off the canvas still lets gravity take back over.
+canvas.addEventListener("pointerdown", () => {
+  thrustHeld = true;
+});
+window.addEventListener("pointerup", () => {
+  thrustHeld = false;
+});
+window.addEventListener("pointercancel", () => {
+  thrustHeld = false;
 });
 
+const THRUST_KEYS = ["ArrowUp", "w", "W", " "];
+
 window.addEventListener("keydown", (event) => {
-  if (event.key === "ArrowUp" || event.key === "w" || event.key === "W") keyDir = -1;
-  if (event.key === "ArrowDown" || event.key === "s" || event.key === "S") keyDir = 1;
+  if (THRUST_KEYS.includes(event.key)) {
+    event.preventDefault(); // stop space from scrolling the page
+    thrustHeld = true;
+  }
 });
 
 window.addEventListener("keyup", (event) => {
-  if (["ArrowUp", "ArrowDown", "w", "W", "s", "S"].includes(event.key)) keyDir = 0;
+  if (THRUST_KEYS.includes(event.key)) thrustHeld = false;
 });
 
-// A key held when focus leaves the window (alt-tab, a notification, clicking
-// another app) never gets its keyup --- the browser just stops delivering
-// events to this page. Without this, keyDir stays stuck non-zero forever,
-// and the additive keyboard branch in frame() overrides pointer control too
-// on return, since it only checks keyDir !== 0, not which input is "active."
+// A key or pointer held when focus leaves the window (alt-tab, a
+// notification, clicking another app) never gets its keyup/pointerup --- the
+// browser just stops delivering events to this page. Without this, thrust
+// would stay stuck on forever once focus returns.
 window.addEventListener("blur", () => {
-  keyDir = 0;
+  thrustHeld = false;
 });
 
 window.addEventListener("resize", resizeCanvas);
@@ -205,8 +210,7 @@ function frame(now: number): void {
   lastTime = now;
 
   if (state.alive) {
-    if (keyDir !== 0) pointerY = Math.min(1, Math.max(0, pointerY + keyDir * KEY_SPEED * dt));
-    state = advance(state, dt, pointerY, DEFAULT_CONFIG);
+    state = advance(state, dt, thrustHeld, DEFAULT_CONFIG);
     trail.push(state.brushY);
     if (trail.length > TRAIL_LENGTH) trail.shift();
     if (!state.alive) {

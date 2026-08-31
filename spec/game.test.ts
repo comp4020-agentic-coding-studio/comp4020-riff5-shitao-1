@@ -5,6 +5,7 @@ import {
   createInitialState,
   DEFAULT_CONFIG,
   gapCenterFor,
+  type GameState,
   type Wall,
 } from "../game-logic.ts";
 
@@ -35,14 +36,14 @@ describe("advance: the round ends on either failure, not just collision", () => 
   it("kills the run when a wall's gap doesn't reach the brush's height", () => {
     let state = createInitialState();
     state = { ...state, walls: [{ x: DEFAULT_CONFIG.brushX, gapCenter: 0.9 }], brushY: 0.5 };
-    const next = advance(state, 1 / 60, 0.5);
+    const next = advance(state, 1 / 60, false);
     expect(next.alive).toBe(false);
     expect(next.cause).toBe("wall");
   });
 
   it("kills the run when ink runs dry, even with every wall cleared", () => {
     let state = { ...createInitialState(), ink: 0.001, walls: [], drops: [] };
-    const next = advance(state, 1, 0.5);
+    const next = advance(state, 1, false);
     expect(next.alive).toBe(false);
     expect(next.cause).toBe("ink");
   });
@@ -55,7 +56,7 @@ describe("advance: the round ends on either failure, not just collision", () => 
       walls: [],
       drops: [{ x: DEFAULT_CONFIG.brushX, y: 0.5 }],
     };
-    const next = advance(state, 1 / 60, 0.5);
+    const next = advance(state, 1 / 60, false);
     expect(next.alive).toBe(true);
     expect(next.ink).toBeGreaterThan(0.2);
     expect(next.drops).toHaveLength(0);
@@ -63,14 +64,38 @@ describe("advance: the round ends on either failure, not just collision", () => 
 
   it("does nothing once the run is already over", () => {
     const state = { ...createInitialState(), alive: false, cause: "wall" as const };
-    const next = advance(state, 1, 0.5);
+    const next = advance(state, 1, false);
     expect(next).toBe(state);
   });
 
   it("distance only grows while alive, so it doubles as a stable score", () => {
     const state = createInitialState();
-    const next = advance(state, 1 / 60, 0.5);
+    const next = advance(state, 1 / 60, false);
     expect(next.distance).toBeGreaterThan(state.distance);
+  });
+});
+
+describe("advance: gravity always pulls down, holding up is the only thing that fights it", () => {
+  it("falls when the up control isn't held, even with no walls or drops in the way", () => {
+    const state = { ...createInitialState(), walls: [], drops: [] };
+    const next = advance(state, 0.5, false);
+    expect(next.brushY).toBeGreaterThan(state.brushY);
+    expect(next.brushVelocity).toBeGreaterThan(0);
+  });
+
+  it("rises when the up control is held long enough to overcome gravity", () => {
+    const state = { ...createInitialState(), walls: [], drops: [] };
+    const next = advance(state, 0.5, true);
+    expect(next.brushY).toBeLessThan(state.brushY);
+    expect(next.brushVelocity).toBeLessThan(0);
+  });
+
+  it("releasing the up control lets gravity retake the stroke on the very next frame", () => {
+    let state: GameState = { ...createInitialState(), walls: [], drops: [] };
+    state = advance(state, 0.2, true); // rising
+    const risingVelocity = state.brushVelocity;
+    state = advance(state, 1 / 60, false); // let go
+    expect(state.brushVelocity).toBeGreaterThan(risingVelocity);
   });
 });
 
