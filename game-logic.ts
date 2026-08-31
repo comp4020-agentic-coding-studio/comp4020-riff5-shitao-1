@@ -46,7 +46,7 @@ export interface Config {
 export const DEFAULT_CONFIG: Config = {
   brushX: 0.2,
   brushRadius: 0.02,
-  scrollSpeed: 0.16,
+  scrollSpeed: 0.24,
   maxSpeedMultiplier: 2.2,
   speedRampPerUnit: 0.05,
   wallSpacing: 0.5,
