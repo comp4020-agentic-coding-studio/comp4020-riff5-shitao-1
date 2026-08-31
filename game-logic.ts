@@ -98,6 +98,14 @@ export function gapCenterFor(index: number): number {
   return clamp(0.5 + amplitude * Math.sin(index * 0.9), 0.16, 0.84);
 }
 
+// A drop's position within its gap: two sine waves at frequencies unrelated
+// to gapCenterFor's, so the drop doesn't track the gap's own swing and land
+// dead-centre every time. Bounded to [-1, 1] --- the caller scales it to fit
+// inside the gap with room to spare.
+export function dropOffsetFor(index: number): number {
+  return Math.sin(index * 1.71 + 1.3) * 0.6 + Math.sin(index * 3.87 + 2.4) * 0.4;
+}
+
 export function speedMultiplier(distance: number, config: Config = DEFAULT_CONFIG): number {
   return Math.min(config.maxSpeedMultiplier, 1 + distance * config.speedRampPerUnit);
 }
@@ -163,8 +171,12 @@ export function advance(
     walls = [...walls, { x: 1 + config.wallThickness, gapCenter }];
     // The ink lives inside the gap it belongs to rather than on a schedule of
     // its own --- collecting a drop and threading the gap are the same
-    // motion, so reaching for ink never means flying blind into a wall.
-    drops = [...drops, { x: 1 + config.wallThickness, y: gapCenter }];
+    // motion, so reaching for ink never means flying blind into a wall. It's
+    // jittered off dead-centre (but kept clear of the wall edges) so the
+    // gap's easiest line isn't always the same line.
+    const maxDropOffset = Math.max(0, config.gapHeight / 2 - config.dropRadius * 1.5);
+    const dropY = gapCenter + maxDropOffset * dropOffsetFor(wallSpawnIndex);
+    drops = [...drops, { x: 1 + config.wallThickness, y: dropY }];
     wallSpawnIndex += 1;
   }
 
