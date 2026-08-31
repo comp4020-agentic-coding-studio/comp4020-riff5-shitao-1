@@ -141,9 +141,11 @@ function drawScene(now: number): void {
   ctx!.fillStyle = dead ? `rgba(28, 26, 23, ${0.35 * fade + 0.15})` : INK;
   for (const wall of state.walls) {
     const [wx] = toPixels(wall.x, 0);
-    const wallWidthPx = DEFAULT_CONFIG.wallThickness * w;
-    const gapTop = (wall.gapCenter - DEFAULT_CONFIG.gapHeight / 2) * h;
-    const gapBottom = (wall.gapCenter + DEFAULT_CONFIG.gapHeight / 2) * h;
+    const thickness = wall.thickness ?? DEFAULT_CONFIG.wallThickness;
+    const gapHeight = wall.gapHeight ?? DEFAULT_CONFIG.gapHeight;
+    const wallWidthPx = thickness * w;
+    const gapTop = (wall.gapCenter - gapHeight / 2) * h;
+    const gapBottom = (wall.gapCenter + gapHeight / 2) * h;
     ctx!.fillRect(wx - wallWidthPx / 2, 0, wallWidthPx, gapTop);
     ctx!.fillRect(wx - wallWidthPx / 2, gapBottom, wallWidthPx, h - gapBottom);
   }

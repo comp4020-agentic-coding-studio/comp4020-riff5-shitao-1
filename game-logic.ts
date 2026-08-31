@@ -6,6 +6,8 @@
 export interface Wall {
   x: number; // world-x, 1 = off the right edge, 0 = the brush's column
   gapCenter: number; // 0..1 fraction of height
+  gapHeight?: number; // 0..1 fraction of height; falls back to config.gapHeight when unset
+  thickness?: number; // 0..1 fraction of width; falls back to config.wallThickness when unset
 }
 
 export interface Drop {
@@ -104,6 +106,30 @@ export function dropYFor(index: number): number {
   return 0.5 + 0.32 * Math.sin(index * 2.07 + 0.7);
 }
 
+// Same deterministic-by-index approach as gapCenterFor, applied to the wall's
+// other dimensions --- a fixed opening of one shape, spaced at one interval,
+// reads as a repeating pattern rather than a stroke to react to. Each swings
+// around the config's base value on its own phase/frequency so the three
+// never move in lockstep.
+export function gapHeightFor(index: number, config: Config = DEFAULT_CONFIG): number {
+  const swing = 0.07;
+  return clamp(config.gapHeight + swing * Math.sin(index * 1.7 + 0.4), config.gapHeight - swing, config.gapHeight + swing);
+}
+
+export function wallThicknessFor(index: number, config: Config = DEFAULT_CONFIG): number {
+  const swing = 0.018;
+  return clamp(
+    config.wallThickness + swing * Math.sin(index * 1.3 + 1.1),
+    config.wallThickness - swing,
+    config.wallThickness + swing,
+  );
+}
+
+export function wallSpacingFor(index: number, config: Config = DEFAULT_CONFIG): number {
+  const swing = 0.16;
+  return clamp(config.wallSpacing + swing * Math.sin(index * 0.6 + 2.2), config.wallSpacing - swing, config.wallSpacing + swing);
+}
+
 export function speedMultiplier(distance: number, config: Config = DEFAULT_CONFIG): number {
   return Math.min(config.maxSpeedMultiplier, 1 + distance * config.speedRampPerUnit);
 }
@@ -118,13 +144,15 @@ export function checkWallCollision(
   wall: Wall,
   config: Config = DEFAULT_CONFIG,
 ): boolean {
-  const wallLeft = wall.x - config.wallThickness / 2;
-  const wallRight = wall.x + config.wallThickness / 2;
+  const thickness = wall.thickness ?? config.wallThickness;
+  const gapHeight = wall.gapHeight ?? config.gapHeight;
+  const wallLeft = wall.x - thickness / 2;
+  const wallRight = wall.x + thickness / 2;
   const overlapsX = brushX + brushRadius >= wallLeft && brushX - brushRadius <= wallRight;
   if (!overlapsX) return false;
 
-  const gapTop = wall.gapCenter - config.gapHeight / 2;
-  const gapBottom = wall.gapCenter + config.gapHeight / 2;
+  const gapTop = wall.gapCenter - gapHeight / 2;
+  const gapBottom = wall.gapCenter + gapHeight / 2;
   const brushTop = brushY - brushRadius;
   const brushBottom = brushY + brushRadius;
   return brushTop < gapTop || brushBottom > gapBottom;
@@ -148,10 +176,21 @@ export function advance(
 
   let wallSpawnIndex = state.wallSpawnIndex;
   let distanceSinceWall = state.distanceSinceWall + dx;
-  while (distanceSinceWall >= config.wallSpacing) {
-    distanceSinceWall -= config.wallSpacing;
-    walls = [...walls, { x: 1 + config.wallThickness, gapCenter: gapCenterFor(wallSpawnIndex) }];
+  let nextWallGap = wallSpacingFor(wallSpawnIndex, config);
+  while (distanceSinceWall >= nextWallGap) {
+    distanceSinceWall -= nextWallGap;
+    const thickness = wallThicknessFor(wallSpawnIndex, config);
+    walls = [
+      ...walls,
+      {
+        x: 1 + thickness,
+        gapCenter: gapCenterFor(wallSpawnIndex),
+        gapHeight: gapHeightFor(wallSpawnIndex, config),
+        thickness,
+      },
+    ];
     wallSpawnIndex += 1;
+    nextWallGap = wallSpacingFor(wallSpawnIndex, config);
   }
 
   let drops = state.drops.map((d) => ({ x: d.x - dx, y: d.y })).filter((d) => d.x > -config.dropRadius);
