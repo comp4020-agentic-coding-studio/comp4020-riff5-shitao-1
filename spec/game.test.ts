@@ -43,7 +43,7 @@ describe("advance: the round ends on either failure, not just collision", () => 
 
   it("kills the run when ink runs dry, even with every wall cleared", () => {
     let state = { ...createInitialState(), ink: 0.001, walls: [], drops: [] };
-    const next = advance(state, 1, false);
+    const next = advance(state, 1 / 60, false);
     expect(next.alive).toBe(false);
     expect(next.cause).toBe("ink");
   });
@@ -72,6 +72,14 @@ describe("advance: the round ends on either failure, not just collision", () => 
     const state = createInitialState();
     const next = advance(state, 1 / 60, false);
     expect(next.distance).toBeGreaterThan(state.distance);
+  });
+
+  it("kills the run when the brush falls all the way to the bottom edge", () => {
+    const state = { ...createInitialState(), walls: [], drops: [] };
+    const next = advance(state, 1, false); // a full second of unresisted gravity
+    expect(next.alive).toBe(false);
+    expect(next.cause).toBe("ground");
+    expect(next.brushY).toBe(1);
   });
 });
 

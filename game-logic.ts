@@ -21,7 +21,7 @@ export interface GameState {
   walls: Wall[];
   drops: Drop[];
   alive: boolean;
-  cause: "wall" | "ink" | null;
+  cause: "wall" | "ink" | "ground" | null;
   wallSpawnIndex: number;
   dropSpawnIndex: number;
   distanceSinceWall: number;
@@ -151,7 +151,13 @@ export function advance(
   let brushVelocity = state.brushVelocity + config.gravity * dt;
   if (thrustHeld) brushVelocity -= config.lift * dt;
   brushVelocity = clamp(brushVelocity, -config.maxFallSpeed, config.maxFallSpeed);
-  const brushY = clamp01(state.brushY + brushVelocity * dt);
+  // The paper's bottom edge is a floor, not a wall the brush bounces off ---
+  // reaching it means gravity won outright, so it ends the run on its own,
+  // the same way running dry does. The top edge stays a soft clamp: holding
+  // up and pinning against the ceiling is a legitimate way to play.
+  const rawBrushY = state.brushY + brushVelocity * dt;
+  const hitGround = rawBrushY >= 1;
+  const brushY = clamp01(rawBrushY);
 
   let walls = state.walls
     .map((w) => ({ x: w.x - dx, gapCenter: w.gapCenter }))
@@ -187,8 +193,8 @@ export function advance(
   }
 
   const hitWall = walls.some((w) => checkWallCollision(brushY, config.brushX, config.brushRadius, w, config));
-  const alive = !hitWall && ink > 0;
-  const cause: GameState["cause"] = hitWall ? "wall" : ink <= 0 ? "ink" : null;
+  const alive = !hitWall && !hitGround && ink > 0;
+  const cause: GameState["cause"] = hitWall ? "wall" : hitGround ? "ground" : ink <= 0 ? "ink" : null;
 
   return {
     brushY,
