@@ -106,6 +106,14 @@ export function dropOffsetFor(index: number): number {
   return Math.sin(index * 1.71 + 1.3) * 0.6 + Math.sin(index * 3.87 + 2.4) * 0.4;
 }
 
+// Same idea along x: a drop doesn't have to arrive exactly level with its
+// wall, only near it, so this shifts the drop's spawn a little ahead of or
+// behind the wall's own arrival. A different phase/frequency again, so the
+// two axes don't move together. Bounded to [-1, 1].
+export function dropXOffsetFor(index: number): number {
+  return Math.sin(index * 2.53 + 0.4) * 0.5 + Math.sin(index * 4.19 + 1.7) * 0.5;
+}
+
 export function speedMultiplier(distance: number, config: Config = DEFAULT_CONFIG): number {
   return Math.min(config.maxSpeedMultiplier, 1 + distance * config.speedRampPerUnit);
 }
@@ -172,11 +180,14 @@ export function advance(
     // The ink lives inside the gap it belongs to rather than on a schedule of
     // its own --- collecting a drop and threading the gap are the same
     // motion, so reaching for ink never means flying blind into a wall. It's
-    // jittered off dead-centre (but kept clear of the wall edges) so the
-    // gap's easiest line isn't always the same line.
+    // jittered off dead-centre both vertically (but kept clear of the wall
+    // edges) and horizontally (but clamped so it never spawns already
+    // on-screen), so neither the line nor the timing repeats every gap.
     const maxDropOffset = Math.max(0, config.gapHeight / 2 - config.dropRadius * 1.5);
     const dropY = gapCenter + maxDropOffset * dropOffsetFor(wallSpawnIndex);
-    drops = [...drops, { x: 1 + config.wallThickness, y: dropY }];
+    const maxDropXOffset = config.wallSpacing * 0.2;
+    const dropX = Math.max(1, 1 + config.wallThickness + maxDropXOffset * dropXOffsetFor(wallSpawnIndex));
+    drops = [...drops, { x: dropX, y: dropY }];
     wallSpawnIndex += 1;
   }
 
