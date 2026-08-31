@@ -1,5 +1,7 @@
 # COMP4020 static prototype template
 
+test
+
 A starter template for static-site prototypes in **COMP4020 / COMP8020 Agentic
 Coding Studio**. The course provisions a repo from this template for each
 deliverable --- you don't create it yourself. The `start` course skill clones it
